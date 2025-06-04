@@ -1,0 +1,139 @@
+--made with chatgpt sob--
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local Workspace = game:GetService("Workspace")
+local CoreGui = game:GetService("CoreGui")
+
+-- === CONFIGURATION ===
+local TOGGLE_KEY = Enum.KeyCode.P -- Changeable keybind
+local ESP_ENABLED = false -- Start disabled
+
+-- === INTERNAL SETUP ===
+local player = Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local rootPart = character:WaitForChild("HumanoidRootPart")
+
+local espConnections = {}
+local espParts = {}
+
+-- === FUNCTION TO CLEAR ALL ESP ===
+local function clearESP()
+	for _, obj in ipairs(espParts) do
+		for _, v in pairs(obj) do
+			pcall(function()
+				if typeof(v) == "RBXScriptConnection" then
+					v:Disconnect()
+				else
+					v:Destroy()
+				end
+			end)
+		end
+	end
+	espParts = {}
+end
+
+-- === FUNCTION TO CREATE ESP FOR A PART ===
+local function createESP(part)
+	local highlight = Instance.new("Highlight")
+	highlight.Adornee = part
+	highlight.FillTransparency = 1
+	highlight.OutlineColor = Color3.new(1, 0, 0)
+	highlight.OutlineTransparency = 0
+	highlight.Parent = CoreGui
+
+	local attach0 = Instance.new("Attachment", rootPart)
+	local attach1 = Instance.new("Attachment", part)
+
+	local beam = Instance.new("Beam")
+	beam.Attachment0 = attach0
+	beam.Attachment1 = attach1
+	beam.Color = ColorSequence.new(Color3.fromRGB(255, 0, 0))
+	beam.Width0 = 0.1
+	beam.Width1 = 0.1
+	beam.FaceCamera = true
+	beam.Parent = part
+
+	local billboard = Instance.new("BillboardGui")
+	billboard.Size = UDim2.new(0, 40, 0, 16)
+	billboard.StudsOffset = Vector3.new(0, 2.5, 0)
+	billboard.AlwaysOnTop = true
+	billboard.Adornee = part
+	billboard.Parent = part
+
+	local label = Instance.new("TextLabel")
+	label.Size = UDim2.new(1, 0, 1, 0)
+	label.BackgroundTransparency = 1
+	label.TextColor3 = Color3.fromRGB(255, 0, 0)
+	label.Font = Enum.Font.SourceSansBold
+	label.TextScaled = true
+	label.Text = "0"
+	label.Parent = billboard
+
+	local connection = RunService.RenderStepped:Connect(function()
+		if part and rootPart then
+			local distance = (part.Position - rootPart.Position).Magnitude
+			label.Text = math.floor(distance) .. " studs"
+		end
+	end)
+
+	table.insert(espParts, {
+		highlight,
+		beam,
+		attach0,
+		attach1,
+		billboard,
+		connection
+	})
+end
+
+-- === FUNCTION TO SETUP ESP FOR ALL CURRENT PARTS ===
+local function enableESP()
+	local logic = Workspace:FindFirstChild("Logic")
+	if not logic then return end
+
+	for _, part in ipairs(logic:GetChildren()) do
+		if part:IsA("BasePart") and part.Name == "Moveset" then
+			createESP(part)
+		end
+	end
+
+	local addedConn = logic.ChildAdded:Connect(function(part)
+		if part:IsA("BasePart") and part.Name == "Moveset" then
+			createESP(part)
+		end
+	end)
+
+	table.insert(espConnections, addedConn)
+end
+
+-- === TOGGLE FUNCTION ===
+local function toggleESP()
+	ESP_ENABLED = not ESP_ENABLED
+	if ESP_ENABLED then
+		enableESP()
+	else
+		clearESP()
+		for _, conn in ipairs(espConnections) do
+			pcall(function() conn:Disconnect() end)
+		end
+		espConnections = {}
+	end
+end
+
+-- === KEYBIND LISTENER ===
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+	if not gameProcessed and input.KeyCode == TOGGLE_KEY then
+		toggleESP()
+	end
+end)
+
+-- === HANDLE CHARACTER RESPAWN ===
+player.CharacterAdded:Connect(function(char)
+	character = char
+	rootPart = character:WaitForChild("HumanoidRootPart")
+	if ESP_ENABLED then
+		clearESP()
+		enableESP()
+	end
+end)
